@@ -40,25 +40,43 @@ const upload = multer({ storage });
 app.use(`/${PUBLIC_DIR}`, express.static(path.join(__dirname, PUBLIC_DIR)));
 
 /**
- * Authenticates the upload request and uploads images if successful
+ * Authenticates protected API requests.
  * @param {express.Request} req The request object
  * @param {express.Response} res The response object
  * @param {express.NextFunction} next The callback to call if it succeeds
  */
-function authenticateAndUpload(req, res, next) {
+function authenticate(req, res, next) {
     // Secret doesn't match, throw 404
     if (req.headers.authorization !== SECRET) {
         return res.status(404).sendFile(path.join(__dirname, '404.html'));
     }
-    upload.array(PUBLIC_DIR)(req, res, e => {
-        if (e) console.error(e);
-        next();
-    });
+    next();
 }
 
 // Not accessible via cloudfront; it doesn't pass body
-app.post('/api/upload', authenticateAndUpload, (req, res) => {
-    res.status(200).send({ urls: req.files.map(file => `${CDN_URL}/${PUBLIC_DIR}/${file.filename}`) });
+app.post('/api/upload', authenticate, (req, res) => {
+    upload.array(PUBLIC_DIR)(req, res, e => {
+        if (e) console.error(e);
+        res.status(200).send({ urls: req.files.map(file => `${CDN_URL}/${PUBLIC_DIR}/${file.filename}`) });
+    });
+});
+
+app.delete('/api/delete', authenticate, (req, res) => {
+    const { filename } = req.query;
+    if (!filename) {
+        return res.status(400).send({ message: 'No filename provided.' });
+    }
+    const filepath = path.join(__dirname, PUBLIC_DIR, filename);
+    if (!fs.existsSync(filepath)) {
+        return res.status(404).send({ message: 'File does not exist.' });
+    }
+    fs.unlink(filepath, e => {
+        if (e) {
+            console.error(e);
+            return res.status(500).send({ message: 'Unable to delete file.' });
+        }
+        res.status(200).send({ message: 'OK' });
+    });
 });
 
 app.use((req, res) => {
