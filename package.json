@@ -1,0 +1,28 @@
+{
+  "name": "image-server",
+  "version": "1.0.0",
+  "description": "Image host for AWS Cloudfront",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/KrammyGod/image-server"
+  },
+  "bugs": {
+    "url": "https://github.com/KrammyGod/image-server/issues"
+  },
+  "homepage": "https://github.com/KrammyGod/image-server#readme",
+  "keywords": [],
+  "author": {
+    "name": "KrammyGod",
+    "url": "https://github.com/KrammyGod"
+  },
+  "publisher": "KrammyGod",
+  "license": "MIT",
+  "main": "index.js",
+  "scripts": {
+    "start": "node ."
+  },
+  "dependencies": {
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2"
+  }
+}
