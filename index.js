@@ -118,7 +118,7 @@ app.post('/api/sources', authenticate, bodyParser.none(), (req, res) => {
     }
     const filenames = !Array.isArray(req.body.filenames) ? [req.body.filenames] : req.body.filenames;
     const sources = [];
-    !async function () {
+    (async () => {
         for (const filename of filenames) {
             const res = await query(
                 'SELECT source FROM images WHERE fn = $1',
@@ -127,7 +127,7 @@ app.post('/api/sources', authenticate, bodyParser.none(), (req, res) => {
             sources.push(res?.[0]?.source ?? null);
         }
         res.status(200).send({ sources });
-    }();
+    })();
 });
 
 app.put('/api/update', authenticate, bodyParser.none(), (req, res) => {
@@ -135,27 +135,20 @@ app.put('/api/update', authenticate, bodyParser.none(), (req, res) => {
         return res.status(400).send({ message: 'No filenames provided.' });
     }
     const filenames = !Array.isArray(req.body.filenames) ? [req.body.filenames] : req.body.filenames;
-    const sources = !Array.isArray(req.body?.sources) ? [req.body?.sources] : req.body.sources;
     // We allow sources to be undefined to clear source easily.
-    new Promise(resolve => {
-        filenames.forEach((filename, i) => {
-            query(
+    const sources = !Array.isArray(req.body?.sources) ? [req.body?.sources] : req.body.sources;
+    (async () => {
+        for (const [i, filename] of filenames.entries()) {
+            await query(
                 'UPDATE images SET source = $1 WHERE fn = $2',
                 [sources[i], filename]
-            ).then(() => {
-                if (i === filenames.length - 1) {
-                    resolve();
-                }
-            }).catch(() => {
-                if (i === filenames.length - 1) {
-                    resolve();
-                }
-            });
-        });
-    }).then(() => res.status(200).send({ message: 'OK' }));
+            ).catch(() => { });
+        }
+        res.status(200).send({ message: 'OK' })
+    })();
 });
 
-app.post('/api/delete', authenticate, bodyParser.none(), (req, res) => {
+app.delete('/api/delete', authenticate, bodyParser.none(), (req, res) => {
     if (!req.body?.filenames) {
         return res.status(400).send({ message: 'No filenames provided.' });
     }
@@ -166,14 +159,14 @@ app.post('/api/delete', authenticate, bodyParser.none(), (req, res) => {
         if (!fs.existsSync(filepath)) {
             return res.status(400).send({ message: 'File does not exist.' });
         }
-        fs.unlink(filepath, e => {
-            if (e) {
-                console.error(e);
-                return res.status(500).send({ message: 'Unable to delete file.' });
-            }
-            res.status(200).send({ message: 'OK' });
-        });
+        try {
+            fs.unlinkSync(filepath);
+        } catch (e) {
+            console.error(e);
+            return res.status(500).send({ message: 'Unable to delete file.' });
+        }
     }
+    res.status(200).send({ message: 'OK' });
 });
 
 app.use((req, res) => {

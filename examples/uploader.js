@@ -92,7 +92,7 @@ const uploadedFilenames = [];
         deleteForm.append('filenames', filename);
     });
     res = await fetch('http://localhost:5000/api/delete', {
-        method: 'POST',
+        method: 'DELETE',
         headers: {
             Authorization: SECRET
         },
