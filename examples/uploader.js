@@ -15,12 +15,12 @@ for (const file of files) {
 const uploadedFilenames = [];
 
 (async () => {
+    let headers = new Headers();
+    headers.append('Authorization', SECRET);
     // First request: Upload images
     let res = await fetch('http://localhost:5000/api/upload', {
         method: 'POST',
-        headers: {
-            Authorization: SECRET
-        },
+        headers,
         body: uploadForm
     }).catch(e => {
         console.error(e);
@@ -36,18 +36,17 @@ const uploadedFilenames = [];
         }
     }
     
+    // Update headers to set content-type
+    headers.append('Content-Type', 'application/json');
     // Second request: Update sources
-    const updateForm = new FormData();
-    uploadedFilenames.forEach(filename => {
-        updateForm.append('filenames', filename);
-        updateForm.append('sources', 'https://google.com');
-    });
+    const updateForm = {
+        filenames: uploadedFilenames,
+        sources: ['https://google.com']
+    };
     res = await fetch('http://localhost:5000/api/update', {
         method: 'PUT',
-        headers: {
-            Authorization: SECRET
-        },
-        body: updateForm
+        headers,
+        body: JSON.stringify(updateForm)
     }).catch(e => {
         console.error(e);
     });
@@ -62,16 +61,13 @@ const uploadedFilenames = [];
     }
     
     // Third request: Get sources
-    const sourceForm = new FormData();
-    uploadedFilenames.forEach(filename => {
-        sourceForm.append('filenames', filename);
-    });
+    const sourceForm = {
+        filenames: uploadedFilenames
+    }
     res = await fetch('http://localhost:5000/api/sources', {
         method: 'POST',
-        headers: {
-            Authorization: SECRET
-        },
-        body: sourceForm
+        headers,
+        body: JSON.stringify(sourceForm)
     }).catch(e => {
         console.error(e);
     });
@@ -87,16 +83,13 @@ const uploadedFilenames = [];
         }
     }
     
-    const deleteForm = new FormData();
-    uploadedFilenames.forEach(filename => {
-        deleteForm.append('filenames', filename);
-    });
+    const deleteForm = {
+        filenames: uploadedFilenames
+    }
     res = await fetch('http://localhost:5000/api/delete', {
         method: 'DELETE',
-        headers: {
-            Authorization: SECRET
-        },
-        body: deleteForm
+        headers,
+        body: JSON.stringify(deleteForm)
     }).catch(e => {
         console.error(e);
     });

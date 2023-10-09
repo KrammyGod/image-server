@@ -62,7 +62,6 @@ const storage = multer.diskStorage({
     }
 });
 const upload = multer({ storage });
-const bodyParser = multer();
 
 app.use(`/${PUBLIC_DIR}`, express.static(path.join(__dirname, PUBLIC_DIR)));
 
@@ -96,7 +95,12 @@ function authenticate(req, res, next) {
     next();
 }
 
-// Not accessible via cloudfront; it doesn't pass body
+/**
+ * Not accessible via cloudfront; it doesn't pass body
+ * Route: /api/upload
+ * Request type: multipart/form-data
+ * Request body: { filename: blob, sources: string[] }
+ */
 app.post('/api/upload', authenticate, (req, res) => {
     upload.array(PUBLIC_DIR)(req, res, e => {
         if (e) console.error(e);
@@ -111,15 +115,18 @@ app.post('/api/upload', authenticate, (req, res) => {
     });
 });
 
-// Private API to get all sources for a list of files
-app.post('/api/sources', authenticate, bodyParser.none(), (req, res) => {
-    if (!req.body?.filenames) {
+/**
+ * Private API to get all sources for a list of files
+ * Route: /api/sources
+ * Request body: { filenames: string[] }
+ */
+app.post('/api/sources', authenticate, express.json(), (req, res) => {
+    if (!req.body?.filenames || !Array.isArray(req.body.filenames)) {
         return res.status(400).send({ message: 'No filenames provided.' });
     }
-    const filenames = !Array.isArray(req.body.filenames) ? [req.body.filenames] : req.body.filenames;
     const sources = [];
     (async () => {
-        for (const filename of filenames) {
+        for (const filename of req.body.filenames) {
             const res = await query(
                 'SELECT source FROM images WHERE fn = $1',
                 [filename]
@@ -130,30 +137,33 @@ app.post('/api/sources', authenticate, bodyParser.none(), (req, res) => {
     })();
 });
 
-app.put('/api/update', authenticate, bodyParser.none(), (req, res) => {
-    if (!req.body?.filenames) {
+/**
+ * Route: /api/update
+ * Request body: { filenames: string[], sources?: string[] }
+ */
+app.put('/api/update', authenticate, express.json(), (req, res) => {
+    if (!req.body?.filenames || !Array.isArray(req.body.filenames)) {
         return res.status(400).send({ message: 'No filenames provided.' });
+    } else if (req.body?.source !== undefined && !Array.isArray(req.body.sources)) {
+        return res.status(400).send({ message: 'Source must be an array.' });
     }
-    const filenames = !Array.isArray(req.body.filenames) ? [req.body.filenames] : req.body.filenames;
     // We allow sources to be undefined to clear source easily.
-    const sources = !Array.isArray(req.body?.sources) ? [req.body?.sources] : req.body.sources;
     (async () => {
-        for (const [i, filename] of filenames.entries()) {
+        for (const [i, filename] of req.body.filenames.entries()) {
             await query(
                 'UPDATE images SET source = $1 WHERE fn = $2',
-                [sources[i], filename]
+                [req.body?.sources[i], filename]
             ).catch(() => { });
         }
         res.status(200).send({ message: 'OK' })
     })();
 });
 
-app.delete('/api/delete', authenticate, bodyParser.none(), (req, res) => {
-    if (!req.body?.filenames) {
+app.delete('/api/delete', authenticate, express.json(), (req, res) => {
+    if (!req.body?.filenames || !Array.isArray(req.body.filenames)) {
         return res.status(400).send({ message: 'No filenames provided.' });
     }
-    const filenames = !Array.isArray(req.body.filenames) ? [req.body.filenames] : req.body.filenames;
-    for (const filename of filenames) {
+    for (const filename of req.body.filenames) {
         const filepath = path.join(__dirname, PUBLIC_DIR, filename);
         query('DELETE FROM images WHERE fn = $1', [filename]).catch(() => { });
         if (!fs.existsSync(filepath)) {
