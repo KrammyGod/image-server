@@ -15,64 +15,68 @@ for (const file of files) {
 const uploadedFilenames = [];
 
 (async () => {
-    await fetch('http://localhost:5000/api/upload', {
+    // First request: Upload images
+    let res = await fetch('http://localhost:5000/api/upload', {
         method: 'POST',
         headers: {
             Authorization: SECRET
         },
         body: uploadForm
-    }).then(async res => {
-        if (res.status === 200) {
-            await res.json().then(data => {
-                console.log(data);
-                uploadedFilenames.push(...data.urls.map(url => url.split('/').pop()));
-            });
-        } else {
-            await res.text().then(text => {
-                console.error(text);
-            });
-        }
     }).catch(e => {
         console.error(e);
     });
+    if (res) {
+        if (res.status === 200) {
+            const data = await res.json();
+            console.dir(data);
+            uploadedFilenames.push(...data.urls.map(url => url.split('/').pop()));
+        } else {
+            const text = await res.text();
+            console.error(text);
+        }
+    }
     
+    // Second request: Update sources
     const updateForm = new FormData();
     uploadedFilenames.forEach(filename => {
         updateForm.append('filenames', filename);
         updateForm.append('sources', 'https://google.com');
     });
-    await fetch('http://localhost:5000/api/update', {
+    res = await fetch('http://localhost:5000/api/update', {
         method: 'PUT',
         headers: {
             Authorization: SECRET
         },
         body: updateForm
-    }).then(async res => {
-        if (res.status === 200) {
-            await res.json().then(data => {
-                console.log(data.message);
-            });
-        } else {
-            await res.text().then(text => {
-                console.error(text);
-            });
-        }
     }).catch(e => {
         console.error(e);
     });
+    if (res) {
+        if (res.status !== 404) {
+            const data = await res.json();
+            console.log(data.message);
+        } else {
+            const text = await res.text();
+            console.error(text);
+        }
+    }
     
+    // Third request: Get sources
     const sourceForm = new FormData();
     uploadedFilenames.forEach(filename => {
         sourceForm.append('filenames', filename);
     });
-    await fetch('http://localhost:5000/api/sources', {
+    res = await fetch('http://localhost:5000/api/sources', {
         method: 'POST',
         headers: {
             Authorization: SECRET
         },
         body: sourceForm
-    }).then(async res => {
-        if (res.status === 200) {
+    }).catch(e => {
+        console.error(e);
+    });
+    if (res) {
+        if (res.status !== 404) {
             await res.json().then(data => {
                 console.dir(data.sources);
             });
@@ -81,31 +85,30 @@ const uploadedFilenames = [];
                 console.error(text);
             });
         }
-    }).catch(e => {
-        console.error(e);
-    });
+    }
     
     const deleteForm = new FormData();
     uploadedFilenames.forEach(filename => {
         deleteForm.append('filenames', filename);
     });
-    await fetch('http://localhost:5000/api/delete', {
+    res = await fetch('http://localhost:5000/api/delete', {
         method: 'POST',
         headers: {
             Authorization: SECRET
         },
         body: deleteForm
-    }).then(async res => {
-        if (res.status === 200) {
+    }).catch(e => {
+        console.error(e);
+    });
+    if (res) {
+        if (res.status !== 404) {
             await res.json().then(data => {
-                console.dir(data.message);
+                console.log(data.message);
             });
         } else {
             await res.text().then(text => {
                 console.error(text);
             });
         }
-    }).catch(e => {
-        console.error(e);
-    });
+    }
 })();

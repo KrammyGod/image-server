@@ -62,6 +62,7 @@ const storage = multer.diskStorage({
     }
 });
 const upload = multer({ storage });
+const bodyParser = multer();
 
 app.use(`/${PUBLIC_DIR}`, express.static(path.join(__dirname, PUBLIC_DIR)));
 
@@ -99,10 +100,11 @@ function authenticate(req, res, next) {
 app.post('/api/upload', authenticate, (req, res) => {
     upload.array(PUBLIC_DIR)(req, res, e => {
         if (e) console.error(e);
+        const sources = !Array.isArray(req.body?.sources) ? [req.body?.sources] : req.body.sources;
         req.files.forEach((file, i) => {
             query(
                 'UPDATE images SET source = $1 WHERE fn = $2',
-                [req.body.sources?.[i], file.filename]
+                [sources[i], file.filename]
             ).catch(() => { });
         });
         res.status(200).send({ urls: req.files.map(file => `${CDN_URL}/${PUBLIC_DIR}/${file.filename}`) });
@@ -110,48 +112,42 @@ app.post('/api/upload', authenticate, (req, res) => {
 });
 
 // Private API to get all sources for a list of files
-app.post('/api/sources', authenticate, (req, res) => {
-    if (!req.body?.filenames || !Array.isArray(req.body.filenames)) {
+app.post('/api/sources', authenticate, bodyParser.none(), (req, res) => {
+    if (!req.body?.filenames) {
         return res.status(400).send({ message: 'No filenames provided.' });
     }
+    const filenames = !Array.isArray(req.body.filenames) ? [req.body.filenames] : req.body.filenames;
     const sources = [];
-    new Promise(resolve => {
-        req.body.filenames.forEach((filename, i) => {
-            query(
+    !async function () {
+        for (const filename of filenames) {
+            const res = await query(
                 'SELECT source FROM images WHERE fn = $1',
                 [filename]
-            ).then(res => {
-                sources.push(res[0]?.source ?? null);
-                if (i === req.body.filenames.length - 1) {
-                    resolve();
-                }
-            }).catch(() => {
-                if (i === req.body.filenames.length - 1) {
-                    resolve();
-                }
-            });
-        });
-    }).then(() => res.status(200).send({ sources }));
+            ).catch(() => { });
+            sources.push(res?.[0]?.source ?? null);
+        }
+        res.status(200).send({ sources });
+    }();
 });
 
-app.put('/api/update', authenticate, (req, res) => {
-    if (!req.body?.filenames || !Array.isArray(req.body.filenames)) {
+app.put('/api/update', authenticate, bodyParser.none(), (req, res) => {
+    if (!req.body?.filenames) {
         return res.status(400).send({ message: 'No filenames provided.' });
-    } else if (req.body.sources !== undefined && !Array.isArray(req.body.sources)) {
-        return res.status(400).send({ message: 'Sources must be an array.' });
     }
+    const filenames = !Array.isArray(req.body.filenames) ? [req.body.filenames] : req.body.filenames;
+    const sources = !Array.isArray(req.body?.sources) ? [req.body?.sources] : req.body.sources;
     // We allow sources to be undefined to clear source easily.
     new Promise(resolve => {
-        req.body.filenames.forEach((filename, i) => {
+        filenames.forEach((filename, i) => {
             query(
                 'UPDATE images SET source = $1 WHERE fn = $2',
-                [req.body.sources?.[i], filename]
+                [sources[i], filename]
             ).then(() => {
-                if (i === req.body.filenames.length - 1) {
+                if (i === filenames.length - 1) {
                     resolve();
                 }
             }).catch(() => {
-                if (i === req.body.filenames.length - 1) {
+                if (i === filenames.length - 1) {
                     resolve();
                 }
             });
@@ -159,15 +155,16 @@ app.put('/api/update', authenticate, (req, res) => {
     }).then(() => res.status(200).send({ message: 'OK' }));
 });
 
-app.post('/api/delete', authenticate, (req, res) => {
-    if (!req.body?.filenames || !Array.isArray(req.body.filenames)) {
+app.post('/api/delete', authenticate, bodyParser.none(), (req, res) => {
+    if (!req.body?.filenames) {
         return res.status(400).send({ message: 'No filenames provided.' });
     }
-    for (const filename of req.body.filenames) {
+    const filenames = !Array.isArray(req.body.filenames) ? [req.body.filenames] : req.body.filenames;
+    for (const filename of filenames) {
         const filepath = path.join(__dirname, PUBLIC_DIR, filename);
         query('DELETE FROM images WHERE fn = $1', [filename]).catch(() => { });
         if (!fs.existsSync(filepath)) {
-            return res.status(404).send({ message: 'File does not exist.' });
+            return res.status(400).send({ message: 'File does not exist.' });
         }
         fs.unlink(filepath, e => {
             if (e) {
