@@ -6,6 +6,10 @@ const path = require('path');
 const pg = require('pg');
 const multer = require('multer');
 
+// Setup ffmpeg
+const ffmpeg = require('fluent-ffmpeg');
+ffmpeg.setFfmpegPath(process.env.FFMPEG_PATH);
+
 const PORT = process.env.PORT || 5000;
 const SECRET = process.env.SECRET;
 // Should match one in .gitignore
@@ -16,6 +20,11 @@ const CDN_URL = 'https://d1irvsiobt1r8d.cloudfront.net';
 const pool = new pg.Pool({
     connectionTimeoutMillis: 2000
 });
+
+// Setup public DIR
+if (!fs.existsSync(path.join(__dirname, PUBLIC_DIR))) {
+    fs.mkdirSync(path.join(__dirname, PUBLIC_DIR), { recursive: true });
+}
 
 /**
  * Query database safely
@@ -43,13 +52,17 @@ const storage = multer.diskStorage({
         cb(null, path.join(__dirname, PUBLIC_DIR));
     },
     filename: async (req, file, cb) => {
+        const ext = path.extname(file.originalname);
+        if (!['.jpg', '.png', '.apng', '.gif'].includes(ext)) {
+            return cb(new Error('Invalid file type.'));
+        }
         // Generate a unique filename
-        let filename = `${hasher.generateHash(6)}${path.extname(file.originalname)}`;
+        let filename = `${hasher.generateHash(6)}${ext}`;
         let tries = 0;
         while (tries < 10) {
             // Will hit conflict if filename already exists
             if (await query('INSERT INTO images(fn) VALUES ($1)', [filename]).then(() => false).catch(() => true)) {
-                filename = `${hasher.generateHash(6)}${path.extname(file.originalname)}`;
+                filename = `${hasher.generateHash(6)}${ext}`;
             } else {
                 break;
             }
@@ -66,19 +79,21 @@ const upload = multer({ storage });
 app.use(`/${PUBLIC_DIR}`, express.static(path.join(__dirname, PUBLIC_DIR)));
 
 // Public API returning all sources for any file
-app.use('/source/:filename', (req, res) => {
+app.use('/source/:filename', (req, res, next) => {
     query(
         'SELECT source FROM images WHERE fn = $1',
         [req.params.filename]
     ).then(ret => {
-        // Could be prettier, but for now just plaintext.
         if (ret.length === 0) {
-            return res.status(404).send('File does not exist.');
+            // Cant find image
+            return next(); // This will redirect to 404 page
+        } else if (!ret[0].source) {
+            // Can't find source
+            return res.redirect(`/${PUBLIC_DIR}/${req.params.filename}`);
         }
-        res.status(200).send(`Source of image: ${ret[0].source ?? 'unknown'}`);
-    }).catch(() => {
-        res.status(500).send('Unable to get source.');
-    });
+        // Attempt to redirect to source
+        res.redirect(ret[0].source);
+    }).catch(() => next());
 });
 
 /**
@@ -99,19 +114,38 @@ function authenticate(req, res, next) {
  * Not accessible via cloudfront; it doesn't pass body
  * Route: /api/upload
  * Request type: multipart/form-data
- * Request body: { filename: blob, sources: string[] }
+ * Request body: { filename: blob, sources: string | string[] }
  */
 app.post('/api/upload', authenticate, (req, res) => {
     upload.array(PUBLIC_DIR)(req, res, e => {
-        if (e) console.error(e);
+        if (e) {
+            console.error(e);
+            return res.status(500).send({ message: 'Unable to upload file(s).' });
+        }
         const sources = !Array.isArray(req.body?.sources) ? [req.body?.sources] : req.body.sources;
-        req.files.forEach((file, i) => {
-            query(
-                'UPDATE images SET source = $1 WHERE fn = $2',
-                [sources[i], file.filename]
-            ).catch(() => { });
-        });
-        res.status(200).send({ urls: req.files.map(file => `${CDN_URL}/${PUBLIC_DIR}/${file.filename}`) });
+        (async () => {
+            for (const [i, file] of req.files.entries()) {
+                const ext = path.extname(file.path);
+                // Run ffmpeg and compress any jpgs
+                if (ext === '.jpg') {
+                    await new Promise(resolve => {
+                        ffmpeg(file.path)
+                            .outputOptions('-q:v 2')
+                            .save(`tmp${ext}`)
+                            .on('end', () => {
+                                fs.renameSync(`tmp${ext}`, file.path);
+                                resolve();
+                            })
+                            .on('error', resolve);
+                    });
+                }
+                query(
+                    'UPDATE images SET source = $1 WHERE fn = $2',
+                    [sources[i], file.filename]
+                ).catch(() => { });
+            }
+            res.status(200).send({ urls: req.files.map(file => `${CDN_URL}/${PUBLIC_DIR}/${file.filename}`) });
+        })();
     });
 });
 
