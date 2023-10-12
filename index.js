@@ -144,7 +144,10 @@ app.post('/api/upload', authenticate, (req, res) => {
                     [sources[i], file.filename]
                 ).catch(() => { });
             }
-            res.status(200).send({ urls: req.files.map(file => `${CDN_URL}/${PUBLIC_DIR}/${file.filename}`) });
+            res.status(200).send({
+                urls: req.files.map(file => `${CDN_URL}/${PUBLIC_DIR}/${file.filename}`),
+                ids: req.files.map(file => file.filename)
+            });
         })();
     });
 });
