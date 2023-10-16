@@ -54,7 +54,7 @@ const storage = multer.diskStorage({
     filename: async (req, file, cb) => {
         const ext = path.extname(file.originalname);
         if (!['.jpg', '.png', '.apng', '.gif'].includes(ext)) {
-            return cb(new Error('Invalid file type.'));
+            return cb(new Error(`Invalid file type: ${ext}`));
         }
         // Generate a unique filename
         let filename = `${hasher.generateHash(6)}${ext}`;
