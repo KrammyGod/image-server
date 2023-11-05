@@ -136,9 +136,11 @@ function authenticate(req, res, next) {
 
 /**
  * Not accessible via cloudfront; it doesn't pass body
+ * Method: POST
  * Route: /api/upload
  * Request type: multipart/form-data
  * Request body: { filename: blob, sources: string | string[] }
+ * Response body: { urls: string[], ids: string[] }
  */
 app.post('/api/upload', authenticate, (req, res) => {
     upload.array(PUBLIC_DIR)(req, res, e => {
@@ -166,6 +168,7 @@ app.post('/api/upload', authenticate, (req, res) => {
  * Route: /api/sources
  * Request type: application/json
  * Request body: { filenames: string[] }
+ * Response body: { sources: string[] }
  */
 app.post('/api/sources', authenticate, express.json(), async (req, res) => {
     if (!req.body?.filenames || !Array.isArray(req.body.filenames)) {
@@ -190,24 +193,24 @@ app.post('/api/sources', authenticate, express.json(), async (req, res) => {
  * Route: /api/update
  * Request type: application/json
  * Request body: { filenames: string[], sources?: string[] }
+ * Response body: { message: string }
  */
-app.put('/api/update', authenticate, express.json(), async (req, res) => {
+app.put('/api/update', authenticate, express.json(), (req, res) => {
     if (!req.body?.filenames || !Array.isArray(req.body.filenames)) {
         return res.status(400).send({ message: 'No filenames provided.' });
     } else if (req.body?.source !== undefined && !Array.isArray(req.body.sources)) {
         return res.status(400).send({ message: 'Source must be an array.' });
     }
     // We allow sources to be undefined to clear source easily.
-    const client = await getClient().catch(() => { });
-    if (!client) return res.status(500).send({ message: 'Unable to connect to database.' });
     for (const [i, filename] of req.body.filenames.entries()) {
-        await client.query(
+        query(
             'UPDATE images SET source = $1 WHERE fn = $2',
             [req.body?.sources[i], filename]
         ).catch(() => { });
     }
-    await releaseClient(client, true); // Commit transaction
-    res.status(200).send({ message: 'OK' });
+    res.status(200).send({
+        message: `OK, changed ${req.body.filenames.join(', ')} to ${req.body?.sources?.join(', ') ?? 'null'}`
+    });
 });
 
 /**
@@ -216,30 +219,29 @@ app.put('/api/update', authenticate, express.json(), async (req, res) => {
  * Route: /api/delete
  * Request type: application/json
  * Request body: { filenames: string[] }
+ * Response body: { message: string }
  */
 app.delete('/api/delete', authenticate, express.json(), async (req, res) => {
     if (!req.body?.filenames || !Array.isArray(req.body.filenames)) {
         return res.status(400).send({ message: 'No filenames provided.' });
     }
-    const client = await getClient().catch(() => { });
-    if (!client) return res.status(500).send({ message: 'Unable to connect to database.' });
+    const successful = [];
     for (const filename of req.body.filenames) {
-        const filepath = path.join(__dirname, PUBLIC_DIR, filename);
+        // Protecting against directory traversal
+        const filepath = path.join(__dirname, PUBLIC_DIR, filename.split('/').pop());
+        // Make multiple transactions to rollback any failed deletes
+        const client = await getClient().catch(() => { });
+        if (!client) return res.status(500).send({ message: 'Unable to connect to database.' });
         await client.query('DELETE FROM images WHERE fn = $1', [filename]).catch(() => { });
         if (!fs.existsSync(filepath)) {
-            releaseClient(client, false); // Don't commit transaction
-            return res.status(400).send({ message: 'File does not exist.' });
-        }
-        try {
+            releaseClient(client, false); // Don't commit transaction, and skip
+        } else {
             fs.unlinkSync(filepath);
-        } catch (e) {
-            console.error(e);
-            releaseClient(client, false); // Don't commit transaction
-            return res.status(500).send({ message: `Unable to delete ${filename}` });
+            releaseClient(client, true); // Commit transaction
+            successful.push(filename);
         }
     }
-    releaseClient(client, true); // Commit transaction
-    res.status(200).send({ message: 'OK' });
+    res.status(200).send({ message: `OK, deleted ${successful.join(', ')}` });
 });
 
 app.use((req, res) => {
