@@ -44,32 +44,6 @@ async function query(q, values) {
     return res;
 };
 
-/**
- * Get a pool client with a started transaction.
- * Must call {@link releaseClient()} when completed.
- * @returns {Promise<pg.PoolClient>} The client available to query
- */
-function getClient() {
-    return pool.connect().then(client => {
-        return client.query(
-            'BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE'
-        ).then(() => client);
-    });
-}
-
-/**
- * Release a client and choose to commit or rollback the transaction.
- * @param {pg.PoolClient} client The client to release
- * @param {boolean} commit Whether to commit or rollback the transaction
- */
-function releaseClient(client, commit) {
-    const releaseClient = () => client.release();
-    if (commit) {
-        return client.query('COMMIT').then(releaseClient, releaseClient);
-    }
-    return client.query('ROLLBACK').then(releaseClient, releaseClient);
-}
-
 const app = express();
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
@@ -175,8 +149,6 @@ app.post('/api/sources', authenticate, express.json(), async (req, res) => {
         return res.status(400).send({ message: 'No filenames provided.' });
     }
     const sources = [];
-    const client = await getClient().catch(() => { });
-    if (!client) return res.status(500).send({ message: 'Unable to connect to database.' });
     for (const filename of req.body.filenames) {
         const res = await query(
             'SELECT source FROM images WHERE fn = $1',
@@ -209,7 +181,7 @@ app.put('/api/update', authenticate, express.json(), (req, res) => {
         ).catch(() => { });
     }
     res.status(200).send({
-        message: `OK, changed ${req.body.filenames.join(', ')} to ${req.body?.sources?.join(', ') ?? 'null'}`
+        message: `OK, updated sources of ${req.body.filenames.join(', ')} to ${req.body?.sources?.join(', ') ?? 'null'}`
     });
 });
 
@@ -221,7 +193,7 @@ app.put('/api/update', authenticate, express.json(), (req, res) => {
  * Request body: { filenames: string[] }
  * Response body: { message: string }
  */
-app.delete('/api/delete', authenticate, express.json(), async (req, res) => {
+app.delete('/api/delete', authenticate, express.json(), (req, res) => {
     if (!req.body?.filenames || !Array.isArray(req.body.filenames)) {
         return res.status(400).send({ message: 'No filenames provided.' });
     }
@@ -229,16 +201,14 @@ app.delete('/api/delete', authenticate, express.json(), async (req, res) => {
     for (const filename of req.body.filenames) {
         // Protecting against directory traversal
         const filepath = path.join(__dirname, PUBLIC_DIR, filename.split('/').pop());
-        // Make multiple transactions to rollback any failed deletes
-        const client = await getClient().catch(() => { });
-        if (!client) return res.status(500).send({ message: 'Unable to connect to database.' });
-        await client.query('DELETE FROM images WHERE fn = $1', [filename]).catch(() => { });
-        if (!fs.existsSync(filepath)) {
-            releaseClient(client, false); // Don't commit transaction, and skip
-        } else {
-            fs.unlinkSync(filepath);
-            releaseClient(client, true); // Commit transaction
-            successful.push(filename);
+        if (fs.existsSync(filepath)) {
+            try {
+                fs.unlinkSync(filepath);
+                query('DELETE FROM images WHERE fn = $1', [filename]).catch(() => { });
+                successful.push(filename);
+            } catch (e) {
+                console.error(e);
+            }
         }
     }
     res.status(200).send({ message: `OK, deleted ${successful.join(', ')}` });
