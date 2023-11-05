@@ -6,16 +6,14 @@ const path = require('path');
 const pg = require('pg');
 const multer = require('multer');
 
-// Setup ffmpeg
-const ffmpeg = require('fluent-ffmpeg');
-ffmpeg.setFfmpegPath(process.env.FFMPEG_PATH);
-
 const PORT = process.env.PORT || 5000;
 const SECRET = process.env.SECRET;
 // Should match one in .gitignore
 const PUBLIC_DIR = 'images';
 // AWS CloudFront URL
 const CDN_URL = 'https://d1irvsiobt1r8d.cloudfront.net';
+// Hash length
+const HASH_LENGTH = 6;
 
 const pool = new pg.Pool({
     connectionTimeoutMillis: 2000
@@ -30,7 +28,7 @@ if (!fs.existsSync(path.join(__dirname, PUBLIC_DIR))) {
  * Query database safely
  * @param {string} q The query string
  * @param {any[]} values Parameters to the query
- * @returns {Promise<pg.QueryResultRow>} The resulting rows
+ * @returns {Promise<pg.QueryResultRow[]>} The resulting rows
  */
 async function query(q, values) {
     const client = await pool.connect().catch(() => {
@@ -46,6 +44,32 @@ async function query(q, values) {
     return res;
 };
 
+/**
+ * Get a pool client with a started transaction.
+ * Must call {@link releaseClient()} when completed.
+ * @returns {Promise<pg.PoolClient>} The client available to query
+ */
+function getClient() {
+    return pool.connect().then(client => {
+        return client.query(
+            'BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE'
+        ).then(() => client);
+    });
+}
+
+/**
+ * Release a client and choose to commit or rollback the transaction.
+ * @param {pg.PoolClient} client The client to release
+ * @param {boolean} commit Whether to commit or rollback the transaction
+ */
+function releaseClient(client, commit) {
+    const releaseClient = () => client.release();
+    if (commit) {
+        return client.query('COMMIT').then(releaseClient, releaseClient);
+    }
+    return client.query('ROLLBACK').then(releaseClient, releaseClient);
+}
+
 const app = express();
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
@@ -57,12 +81,12 @@ const storage = multer.diskStorage({
             return cb(new Error(`Invalid file type: ${ext}`));
         }
         // Generate a unique filename
-        let filename = `${hasher.generateHash(6)}${ext}`;
+        let filename = `${hasher.generateHash(HASH_LENGTH)}${ext}`;
         let tries = 0;
         while (tries < 10) {
             // Will hit conflict if filename already exists
             if (await query('INSERT INTO images(fn) VALUES ($1)', [filename]).then(() => false).catch(() => true)) {
-                filename = `${hasher.generateHash(6)}${ext}`;
+                filename = `${hasher.generateHash(HASH_LENGTH)}${ext}`;
             } else {
                 break;
             }
@@ -123,96 +147,98 @@ app.post('/api/upload', authenticate, (req, res) => {
             return res.status(500).send({ message: 'Unable to upload file(s).' });
         }
         const sources = !Array.isArray(req.body?.sources) ? [req.body?.sources] : req.body.sources;
-        (async () => {
-            for (const [i, file] of req.files.entries()) {
-                const ext = path.extname(file.path);
-                // Run ffmpeg and compress any jpgs
-                if (ext === '.jpg') {
-                    await new Promise(resolve => {
-                        ffmpeg(file.path)
-                            .outputOptions('-q:v 2')
-                            .save(`tmp${ext}`)
-                            .on('end', () => {
-                                fs.renameSync(`tmp${ext}`, file.path);
-                                resolve();
-                            })
-                            .on('error', resolve);
-                    });
-                }
-                query(
-                    'UPDATE images SET source = $1 WHERE fn = $2',
-                    [sources[i], file.filename]
-                ).catch(() => { });
-            }
-            res.status(200).send({
-                urls: req.files.map(file => `${CDN_URL}/${PUBLIC_DIR}/${file.filename}`),
-                ids: req.files.map(file => file.filename)
-            });
-        })();
+        for (const [i, file] of req.files.entries()) {
+            query(
+                'UPDATE images SET source = $1 WHERE fn = $2',
+                [sources[i], file.filename]
+            ).catch(() => { });
+        }
+        res.status(200).send({
+            urls: req.files.map(file => `${CDN_URL}/${PUBLIC_DIR}/${file.filename}`),
+            ids: req.files.map(file => file.filename)
+        });
     });
 });
 
 /**
  * Private API to get all sources for a list of files
+ * Method: POST
  * Route: /api/sources
+ * Request type: application/json
  * Request body: { filenames: string[] }
  */
-app.post('/api/sources', authenticate, express.json(), (req, res) => {
+app.post('/api/sources', authenticate, express.json(), async (req, res) => {
     if (!req.body?.filenames || !Array.isArray(req.body.filenames)) {
         return res.status(400).send({ message: 'No filenames provided.' });
     }
     const sources = [];
-    (async () => {
-        for (const filename of req.body.filenames) {
-            const res = await query(
-                'SELECT source FROM images WHERE fn = $1',
-                [filename]
-            ).catch(() => { });
-            sources.push(res?.[0]?.source ?? null);
-        }
-        res.status(200).send({ sources });
-    })();
+    const client = await getClient().catch(() => { });
+    if (!client) return res.status(500).send({ message: 'Unable to connect to database.' });
+    for (const filename of req.body.filenames) {
+        const res = await query(
+            'SELECT source FROM images WHERE fn = $1',
+            [filename]
+        ).catch(() => { });
+        sources.push(res?.at(0)?.source ?? null);
+    }
+    res.status(200).send({ sources });
 });
 
 /**
+ * Private API to update sources for a list of files
+ * Method: PUT
  * Route: /api/update
+ * Request type: application/json
  * Request body: { filenames: string[], sources?: string[] }
  */
-app.put('/api/update', authenticate, express.json(), (req, res) => {
+app.put('/api/update', authenticate, express.json(), async (req, res) => {
     if (!req.body?.filenames || !Array.isArray(req.body.filenames)) {
         return res.status(400).send({ message: 'No filenames provided.' });
     } else if (req.body?.source !== undefined && !Array.isArray(req.body.sources)) {
         return res.status(400).send({ message: 'Source must be an array.' });
     }
     // We allow sources to be undefined to clear source easily.
-    (async () => {
-        for (const [i, filename] of req.body.filenames.entries()) {
-            await query(
-                'UPDATE images SET source = $1 WHERE fn = $2',
-                [req.body?.sources[i], filename]
-            ).catch(() => { });
-        }
-        res.status(200).send({ message: 'OK' })
-    })();
+    const client = await getClient().catch(() => { });
+    if (!client) return res.status(500).send({ message: 'Unable to connect to database.' });
+    for (const [i, filename] of req.body.filenames.entries()) {
+        await client.query(
+            'UPDATE images SET source = $1 WHERE fn = $2',
+            [req.body?.sources[i], filename]
+        ).catch(() => { });
+    }
+    await releaseClient(client, true); // Commit transaction
+    res.status(200).send({ message: 'OK' });
 });
 
-app.delete('/api/delete', authenticate, express.json(), (req, res) => {
+/**
+ * Private API to delete a list of files
+ * Method: DELETE
+ * Route: /api/delete
+ * Request type: application/json
+ * Request body: { filenames: string[] }
+ */
+app.delete('/api/delete', authenticate, express.json(), async (req, res) => {
     if (!req.body?.filenames || !Array.isArray(req.body.filenames)) {
         return res.status(400).send({ message: 'No filenames provided.' });
     }
+    const client = await getClient().catch(() => { });
+    if (!client) return res.status(500).send({ message: 'Unable to connect to database.' });
     for (const filename of req.body.filenames) {
         const filepath = path.join(__dirname, PUBLIC_DIR, filename);
-        query('DELETE FROM images WHERE fn = $1', [filename]).catch(() => { });
+        await client.query('DELETE FROM images WHERE fn = $1', [filename]).catch(() => { });
         if (!fs.existsSync(filepath)) {
+            releaseClient(client, false); // Don't commit transaction
             return res.status(400).send({ message: 'File does not exist.' });
         }
         try {
             fs.unlinkSync(filepath);
         } catch (e) {
             console.error(e);
-            return res.status(500).send({ message: 'Unable to delete file.' });
+            releaseClient(client, false); // Don't commit transaction
+            return res.status(500).send({ message: `Unable to delete ${filename}` });
         }
     }
+    releaseClient(client, true); // Commit transaction
     res.status(200).send({ message: 'OK' });
 });
 
