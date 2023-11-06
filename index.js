@@ -167,21 +167,23 @@ app.post('/api/sources', authenticate, express.json(), async (req, res) => {
  * Request body: { filenames: string[], sources?: string[] }
  * Response body: { message: string }
  */
-app.put('/api/update', authenticate, express.json(), (req, res) => {
+app.put('/api/update', authenticate, express.json(), async (req, res) => {
     if (!req.body?.filenames || !Array.isArray(req.body.filenames)) {
         return res.status(400).send({ message: 'No filenames provided.' });
     } else if (req.body?.source !== undefined && !Array.isArray(req.body.sources)) {
         return res.status(400).send({ message: 'Source must be an array.' });
     }
     // We allow sources to be undefined to clear source easily.
+    const sources = [];
     for (const [i, filename] of req.body.filenames.entries()) {
-        query(
-            'UPDATE images SET source = $1 WHERE fn = $2',
+        const res = await query(
+            'UPDATE images SET source = $1 WHERE fn = $2 RETURNING *',
             [req.body?.sources[i], filename]
         ).catch(() => { });
+        sources.push(res?.at(0)?.source ?? 'null');
     }
     res.status(200).send({
-        message: `OK, updated sources of ${req.body.filenames.join(', ')} to ${req.body?.sources?.join(', ') ?? 'null'}`
+        message: `OK, updated sources of ${req.body.filenames.join(', ')} to ${sources.join(', ')}`
     });
 });
 
