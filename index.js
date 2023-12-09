@@ -75,6 +75,8 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 app.use(`/${PUBLIC_DIR}`, (req, res, next) => {
+    console.log('Received request with headers:');
+    console.dir(req.headers);
     // Our own simple implementation of cache control
     const lastCacheUpdate = new Date(req.headers['if-modified-since']).getTime();
     // Cache header exists
