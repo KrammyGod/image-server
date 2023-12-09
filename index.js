@@ -74,21 +74,7 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-app.use(`/${PUBLIC_DIR}`, (req, res, next) => {
-    console.log('Received request with headers:');
-    console.dir(req.headers);
-    // Our own simple implementation of cache control
-    const lastCacheUpdate = new Date(req.headers['if-modified-since']).getTime();
-    // Cache header exists
-    if (!isNaN(lastCacheUpdate)) {
-        const lastModified = fs.statSync(path.join(__dirname, PUBLIC_DIR, req.path), { throwIfNoEntry: false })?.mtimeMs;
-        // If the file hasn't been modified since the last cache update, send 304 to save our resources.
-        if (lastModified <= lastCacheUpdate) {
-            return res.status(304).end();
-        }
-    }
-    next();
-}, express.static(path.join(__dirname, PUBLIC_DIR)));
+app.use(`/${PUBLIC_DIR}`, express.static(path.join(__dirname, PUBLIC_DIR)));
 
 // Public API returning all sources for any file
 app.use('/source/:filename', (req, res, next) => {
