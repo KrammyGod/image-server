@@ -59,7 +59,9 @@ const storage = multer.diskStorage({
         let tries = 0;
         while (tries < 10) {
             // Will hit conflict if filename already exists
-            if (await query('INSERT INTO images(fn) VALUES ($1)', [filename]).then(() => false).catch(() => true)) {
+            if (await query('INSERT INTO images(fn) VALUES ($1)', [filename]).then(() => false, () => true)) {
+                // Try to delete what we just inserted in case and ignore if there are any errors.
+                await query('DELETE FROM images WHERE fn = $1', [filename]).catch(() => { });
                 filename = `${hasher.generateHash(HASH_LENGTH)}${ext}`;
             } else {
                 break;
