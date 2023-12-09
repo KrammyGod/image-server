@@ -74,7 +74,25 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-app.use(`/${PUBLIC_DIR}`, express.static(path.join(__dirname, PUBLIC_DIR)));
+/**
+ * Decorates the res.end to log some details.
+ * @param {express.Request} req The request object
+ * @param {express.Response} res The response object
+ * @param {express.NextFunction} next The callback to call if it succeeds
+ */
+const logger = (req, res, next) => {
+    console.log(`${req.method} ${req.originalUrl} from ${req.ip}`);
+    console.dir(req.headers);
+    const oldEnd = res.end;
+    res.end = function () {
+        console.log(`Returning response: ${res.statusCode}`);
+        console.dir(res.getHeaders());
+        oldEnd.apply(res, arguments);
+    };
+    next();
+};
+
+app.use(`/${PUBLIC_DIR}`, logger, express.static(path.join(__dirname, PUBLIC_DIR)));
 
 // Public API returning all sources for any file
 app.use('/source/:filename', (req, res, next) => {
