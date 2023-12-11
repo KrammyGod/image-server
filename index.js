@@ -281,12 +281,17 @@ app.delete('/api/delete', authenticate, express.json(), (req, res) => {
             }
         }
     }
+    if (!successful.length) {
+        return res.status(400).send({ message: 'No files matching were found. None were deleted.' });
+    }
     res.status(200).send({ message: `OK, deleted ${successful.join(', ')}` });
 });
 
 app.use('/favicon.ico', express.static(path.join(__dirname, 'favicon.ico')));
 
-app.use((req, res) => {
+// Handling 500s hide stack and send 404 instead.
+app.use((err, req, res, next) => {
+    console.error(err);
     res.status(404).sendFile(path.join(__dirname, '404.html'));
 });
 
