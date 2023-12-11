@@ -84,11 +84,16 @@ const upload = multer({ storage });
  */
 const logger = (req, res, next) => {
     console.log(`${req.method} ${req.originalUrl} from ${req.ip}`);
-    console.dir(req.headers);
     const oldEnd = res.end;
     res.end = function () {
-        console.log(`Returning response: ${res.statusCode}`);
-        console.dir(res.getHeaders());
+        // Add some simple count metrics to monitor response codes.
+        query(
+            `INSERT INTO metrics(statusCode)
+                VALUES ($1)
+            ON CONFLICT (statusCode)
+            DO UPDATE SET count = metrics.count + 1`,
+            [res.statusCode]
+        );
         oldEnd.apply(res, arguments);
     };
     next();
