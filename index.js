@@ -141,7 +141,7 @@ function authenticate(req, res, next) {
  * Response body: { metrics: { statuscode: number, count: number }[] }
  */
 app.get('/api/metrics', authenticate, (req, res) => {
-    query('SELECT * FROM metrics').then(metrics => {
+    query('SELECT * FROM metrics ORDER BY count DESC').then(metrics => {
         res.status(200).send({ metrics });
     });
 });
