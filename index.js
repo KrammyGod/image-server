@@ -138,7 +138,7 @@ function authenticate(req, res, next) {
  * Route: /api/metrics
  * Request type: none
  * Request body: none
- * Response body: { metrics: { statusCode: number, count: number }[] }
+ * Response body: { metrics: { statuscode: number, count: number }[] }
  */
 app.get('/api/metrics', authenticate, (req, res) => {
     query('SELECT * FROM metrics').then(metrics => {
