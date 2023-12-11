@@ -134,6 +134,19 @@ function authenticate(req, res, next) {
 }
 
 /**
+ * Method: GET
+ * Route: /api/metrics
+ * Request type: none
+ * Request body: none
+ * Response body: { metrics: { statusCode: number, count: number }[] }
+ */
+app.get('/api/metrics', authenticate, (req, res) => {
+    query('SELECT * FROM metrics').then(metrics => {
+        res.status(200).send({ metrics });
+    });
+});
+
+/**
  * Not accessible via cloudfront; it doesn't pass body
  * Method: POST
  * Route: /api/upload
@@ -246,3 +259,5 @@ app.use((req, res) => {
 });
 
 app.listen(PORT, () => console.log(`Listening on port ${PORT}`));
+
+query('SELECT * FROM metrics').then(res => console.dir(res));
