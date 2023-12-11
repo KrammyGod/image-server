@@ -289,7 +289,10 @@ app.delete('/api/delete', authenticate, express.json(), (req, res) => {
 
 app.use('/favicon.ico', express.static(path.join(__dirname, 'favicon.ico')));
 
-// Handling 500s hide stack and send 404 instead.
+app.use((req, res) => {
+    res.status(404).sendFile(path.join(__dirname, '404.html'));
+});
+
 app.use((err, req, res, next) => {
     console.error(err);
     res.status(404).sendFile(path.join(__dirname, '404.html'));
