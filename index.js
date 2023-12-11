@@ -77,13 +77,12 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 /**
- * Decorates the res.end to log some details.
+ * Decorates res.end to record metrics for a path.
  * @param {express.Request} req The request object
  * @param {express.Response} res The response object
  * @param {express.NextFunction} next The callback to call if it succeeds
  */
-const logger = (req, res, next) => {
-    console.log(`${req.method} ${req.originalUrl} from ${req.ip}`);
+const metrics = (req, res, next) => {
     const oldEnd = res.end;
     res.end = function () {
         // Add some simple count metrics to monitor response codes.
@@ -99,7 +98,38 @@ const logger = (req, res, next) => {
     next();
 };
 
-app.use(`/${PUBLIC_DIR}`, logger, express.static(path.join(__dirname, PUBLIC_DIR)));
+/**
+ * Decorates res.end to log time taken.
+ * @param {express.Request} req The request object
+ * @param {express.Response} res The response object
+ * @param {express.NextFunction} next The callback to call if it succeeds
+ */
+const logger = (req, res, next) => {
+    const oldEnd = res.end;
+    const start = process.hrtime();
+    res.end = function () {
+        oldEnd.apply(res, arguments);
+        // Record time taken
+        const end = process.hrtime(start);
+        let time;
+        const milliseconds = (end[1] / 1_000_000).toFixed(3);
+        if (end[0] === 0) {
+            // Represent in ms if seconds is 0
+            time = `${milliseconds}ms`;
+        } else {
+            // Else represent in seconds
+            time = `${end[0]}.${Math.round(milliseconds)}s`;
+        }
+        console.log(`${req.method} ${req.originalUrl} from ${req.ip} returned in ` +
+            `${time} with status ${res.statusCode}`);
+    };
+    next();
+};
+
+// Log all incoming requests.
+app.use(logger);
+
+app.use(`/${PUBLIC_DIR}`, metrics, express.static(path.join(__dirname, PUBLIC_DIR)));
 
 // Public API returning all sources for any file
 app.use('/source/:filename', (req, res, next) => {
