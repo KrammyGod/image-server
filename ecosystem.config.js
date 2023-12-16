@@ -3,6 +3,7 @@ module.exports = {
     apps : [{
         name                  : 'server',
         script                : 'index.js',
+        time                  : true,
         instances             : 'max',
         env_production: {
             NODE_ENV: 'production'
