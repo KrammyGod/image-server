@@ -129,8 +129,6 @@ const logger = (req, res, next) => {
 // Log all incoming requests.
 app.use(logger);
 
-app.use(`/${PUBLIC_DIR}`, metrics, express.static(path.join(__dirname, PUBLIC_DIR), { dotfiles: 'ignore' }));
-
 // Public API returning all sources for any file
 app.use('/source/:filename', (req, res, next) => {
     query(
