@@ -8,8 +8,8 @@ const multer = require('multer');
 
 const PORT = process.env.PORT || 5000;
 const SECRET = process.env.SECRET;
-const PUBLIC_DIR = process.env.DIR;
-const FULL_PATH = path.isAbsolute(PUBLIC_DIR) ? PUBLIC_DIR : path.join(__dirname, PUBLIC_DIR)
+const PUBLIC_PATH = 'images'; // Constant from nginx config
+const FULL_PATH = path.isAbsolute(process.env.DIR) ? process.env.DIR : path.join(__dirname, process.env.DIR)
 // AWS CloudFront URL
 const CDN_URL = 'https://d1irvsiobt1r8d.cloudfront.net';
 // Hash length
@@ -77,28 +77,6 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 /**
- * Decorates res.end to record metrics for a path.
- * @param {express.Request} req The request object
- * @param {express.Response} res The response object
- * @param {express.NextFunction} next The callback to call if it succeeds
- */
-const metrics = (req, res, next) => {
-    const oldEnd = res.end;
-    res.end = function () {
-        // Add some simple count metrics to monitor response codes.
-        query(
-            `INSERT INTO metrics(statusCode)
-                VALUES ($1)
-            ON CONFLICT (statusCode)
-            DO UPDATE SET count = metrics.count + 1`,
-            [res.statusCode]
-        );
-        oldEnd.apply(res, arguments);
-    };
-    next();
-};
-
-/**
  * Decorates res.end to log time taken.
  * @param {express.Request} req The request object
  * @param {express.Response} res The response object
@@ -140,7 +118,7 @@ app.use('/source/:filename', (req, res, next) => {
             return next(); // This will redirect to 404 page
         } else if (!ret[0].source) {
             // Can't find source
-            return res.redirect(`/${PUBLIC_DIR}/${req.params.filename}`);
+            return res.redirect(`/${PUBLIC_PATH}/${req.params.filename}`);
         }
         // Attempt to redirect to source
         res.redirect(ret[0].source);
@@ -183,7 +161,8 @@ app.get('/api/metrics', authenticate, (req, res) => {
  * Response body: { urls: string[], ids: string[] }
  */
 app.post('/api/upload', authenticate, (req, res) => {
-    upload.array(PUBLIC_DIR)(req, res, e => {
+    // Form data must be put into images field.
+    upload.array('images')(req, res, e => {
         if (e) {
             console.error(e);
             return res.status(500).send({ message: 'Unable to upload file(s).' });
@@ -196,7 +175,7 @@ app.post('/api/upload', authenticate, (req, res) => {
             ).catch(() => { });
         }
         res.status(200).send({
-            urls: req.files.map(file => `${CDN_URL}/${PUBLIC_DIR}/${file.filename}`),
+            urls: req.files.map(file => `${CDN_URL}/${PUBLIC_PATH}/${file.filename}`),
             ids: req.files.map(file => file.filename)
         });
     });
@@ -268,7 +247,7 @@ app.delete('/api/delete', authenticate, express.json(), (req, res) => {
     const successful = [];
     for (const filename of req.body.filenames) {
         // Protecting against directory traversal
-        const filepath = path.join(__dirname, PUBLIC_DIR, filename.split('/').pop());
+        const filepath = path.join(FULL_PATH, filename.split('/').pop());
         if (fs.existsSync(filepath)) {
             try {
                 fs.unlinkSync(filepath);
