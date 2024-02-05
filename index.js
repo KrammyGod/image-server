@@ -8,8 +8,8 @@ const multer = require('multer');
 
 const PORT = process.env.PORT || 5000;
 const SECRET = process.env.SECRET;
-// Should match one in .gitignore
-const PUBLIC_DIR = 'images';
+const PUBLIC_DIR = process.env.DIR;
+const FULL_PATH = path.isAbsolute(PUBLIC_DIR) ? PUBLIC_DIR : path.join(__dirname, PUBLIC_DIR)
 // AWS CloudFront URL
 const CDN_URL = 'https://d1irvsiobt1r8d.cloudfront.net';
 // Hash length
@@ -20,8 +20,8 @@ const pool = new pg.Pool({
 });
 
 // Setup public DIR
-if (!fs.existsSync(path.join(__dirname, PUBLIC_DIR))) {
-    fs.mkdirSync(path.join(__dirname, PUBLIC_DIR), { recursive: true });
+if (!fs.existsSync(FULL_PATH)) {
+    fs.mkdirSync(FULL_PATH, { recursive: true });
 }
 
 /**
@@ -47,7 +47,7 @@ async function query(q, values) {
 const app = express();
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        cb(null, path.join(__dirname, PUBLIC_DIR));
+        cb(null, FULL_PATH);
     },
     filename: async (req, file, cb) => {
         const ext = path.extname(file.originalname);
