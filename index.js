@@ -99,7 +99,9 @@ const logger = (req, res, next) => {
             // Else represent in seconds
             time = `${end[0]}.${Math.round(milliseconds)}s`;
         }
-        console.log(`${req.method} ${req.originalUrl} from ${req.ip} returned in ` +
+        // Cloudfront secret header passed, so ignore X-Forwarded-For from nginx, and use X-Real-IP
+        const realIp = req.headers[process.env.HEADER] === process.env.HEADER_VALUE ? req.headers['x-real-ip'] : req.ip;
+        console.log(`${req.method} ${req.originalUrl} from ${realIp} returned in ` +
             `${time} with status ${res.statusCode}`);
     };
     next();
