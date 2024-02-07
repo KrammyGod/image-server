@@ -98,7 +98,7 @@ const logger = (req, res, next) => {
             // Else represent in seconds
             time = `${end[0]}.${Math.round(milliseconds)}s`;
         }
-        console.log(`${req.method} ${req.originalUrl} from ${req.ip} returned in ` +
+        console.log(`${req.method} ${req.originalUrl} from ${req.headers['X-Real-IP']} returned in ` +
             `${time} with status ${res.statusCode}`);
     };
     next();
