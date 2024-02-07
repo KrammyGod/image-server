@@ -1,6 +1,7 @@
 require('dotenv/config');
 const fs = require('fs');
 const express = require('express');
+const favicon = require('serve-favicon');
 const hasher = require('./hasher');
 const path = require('path');
 const pg = require('pg');
@@ -267,7 +268,7 @@ app.delete('/api/delete', authenticate, express.json(), (req, res) => {
     res.status(200).send({ message: `OK, deleted ${successful.join(', ')}` });
 });
 
-app.use('/favicon.ico', express.static(path.join(__dirname, 'favicon.ico'), { maxAge: '31536000000' }));
+app.use(favicon(path.join(__dirname, 'favicon.ico')));
 
 app.use((req, res) => {
     res.status(404).sendFile(path.join(__dirname, '404.html'));
