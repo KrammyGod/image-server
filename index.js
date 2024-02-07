@@ -45,6 +45,7 @@ async function query(q, values) {
 };
 
 const app = express();
+app.set('trust proxy', true);
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
         cb(null, FULL_PATH);
@@ -98,7 +99,7 @@ const logger = (req, res, next) => {
             // Else represent in seconds
             time = `${end[0]}.${Math.round(milliseconds)}s`;
         }
-        console.log(`${req.method} ${req.originalUrl} from ${req.headers['X-Real-IP']} returned in ` +
+        console.log(`${req.method} ${req.originalUrl} from ${req.ip} returned in ` +
             `${time} with status ${res.statusCode}`);
     };
     next();
