@@ -1,10 +1,10 @@
-require('dotenv/config');
 module.exports = {
     apps : [{
         name                  : 'server',
         script                : 'index.js',
+        node_args             : '--env-file=.env',
         time                  : true,
-        instances             : 'max',
+        instances             : 0,
         env_production: {
             NODE_ENV: 'production'
         }
@@ -20,7 +20,7 @@ module.exports = {
             'path'        : process.env.DEPLOY_PATH,
             'pre-setup'   : `mkdir -p ${process.env.DEPLOY_PATH}`,
             'pre-deploy'  : 'npm ci --omit dev',
-            'post-deploy' : 'pm2 start --env production --update-env'
+            'post-deploy' : 'pm2 start --env production'
         }
     }
 };

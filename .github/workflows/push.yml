@@ -16,10 +16,8 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Install dependencies
-        run: |
-          npm i -g pm2
-          npm i dotenv
+      - name: Install pm2 to deploy
+        run: npm i -g pm2
 
       - name: Install SSH Key
         uses: shimataro/ssh-key-action@v2
