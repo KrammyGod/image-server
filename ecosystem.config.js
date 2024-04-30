@@ -4,7 +4,7 @@ module.exports = {
         script                : 'index.js',
         node_args             : '--env-file=.env',
         time                  : true,
-        instances             : 0,
+        instances             : 'max',
         env_production: {
             NODE_ENV: 'production'
         }
