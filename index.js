@@ -137,7 +137,7 @@ app.use('/source/:filename', (req, res, next) => {
 function authenticate(req, res, next) {
     // Secret doesn't match, throw 404
     if (req.headers.authorization !== SECRET) {
-        return res.status(404).sendFile(path.join(__dirname, '404.html'));
+        return res.status(200).sendFile(path.join(__dirname, '404.html'));
     }
     next();
 }
@@ -270,12 +270,12 @@ app.delete('/api/delete', authenticate, express.json(), (req, res) => {
 app.use(favicon(path.join(__dirname, 'favicon.ico')));
 
 app.use((req, res) => {
-    res.status(404).sendFile(path.join(__dirname, '404.html'));
+    res.status(200).sendFile(path.join(__dirname, '404.html'));
 });
 
 app.use((err, req, res, next) => {
     console.error(err);
-    res.status(404).sendFile(path.join(__dirname, '404.html'));
+    res.status(200).sendFile(path.join(__dirname, '404.html'));
 });
 
 app.listen(PORT, () => console.log(`Listening on port ${PORT}`));
