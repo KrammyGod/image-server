@@ -143,19 +143,6 @@ function authenticate(req, res, next) {
 }
 
 /**
- * Method: GET
- * Route: /api/metrics
- * Request type: none
- * Request body: none
- * Response body: { metrics: { statuscode: number, count: number }[] }
- */
-app.get('/api/metrics', authenticate, (req, res) => {
-    query('SELECT * FROM metrics ORDER BY count DESC').then(metrics => {
-        res.status(200).send({ metrics });
-    });
-});
-
-/**
  * Not accessible via cloudfront; it doesn't pass body
  * Method: POST
  * Route: /api/upload
@@ -270,7 +257,7 @@ app.delete('/api/delete', authenticate, express.json(), (req, res) => {
 app.use(favicon(path.join(__dirname, 'favicon.ico')));
 
 app.use('/', (req, res) => {
-    res.redirect('https://www.youtube.com/watch?v=dQw4w9WgXcQ')
+    res.redirect('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
 });
 
 app.use((req, res) => {
