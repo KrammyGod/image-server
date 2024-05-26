@@ -10,6 +10,8 @@ const PORT = process.env.PORT || 5000;
 const SECRET = process.env.SECRET;
 const PUBLIC_PATH = 'images'; // Constant from nginx config
 const FULL_PATH = path.isAbsolute(process.env.DIR) ? process.env.DIR : path.join(__dirname, process.env.DIR)
+const ERROR_HTML = path.join(__dirname, '404.html');
+const FAVICON_PATH = path.join(__dirname, 'favicon.ico');
 // AWS CloudFront URL
 const CDN_URL = 'https://d1irvsiobt1r8d.cloudfront.net';
 // Hash length
@@ -137,7 +139,7 @@ app.use('/source/:filename', (req, res, next) => {
 function authenticate(req, res, next) {
     // Secret doesn't match, throw 404
     if (req.headers.authorization !== SECRET) {
-        return res.status(200).sendFile(path.join(__dirname, '404.html'));
+        return res.status(200).sendFile(ERROR_HTML);
     }
     next();
 }
@@ -254,19 +256,19 @@ app.delete('/api/delete', authenticate, express.json(), (req, res) => {
     res.status(200).send({ message: `OK, deleted ${successful.join(', ')}` });
 });
 
-app.use(favicon(path.join(__dirname, 'favicon.ico')));
+app.use(favicon(FAVICON_PATH));
 
 app.use('/', (req, res) => {
     res.redirect('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
 });
 
 app.use((req, res) => {
-    res.status(200).sendFile(path.join(__dirname, '404.html'));
+    res.status(200).sendFile(ERROR_HTML);
 });
 
 app.use((err, req, res, next) => {
     console.error(err);
-    res.status(200).sendFile(path.join(__dirname, '404.html'));
+    res.status(200).sendFile(ERROR_HTML);
 });
 
 app.listen(PORT, () => console.log(`Listening on port ${PORT}`));

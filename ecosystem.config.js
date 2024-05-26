@@ -2,9 +2,12 @@ module.exports = {
     apps : [{
         name                  : 'server',
         script                : 'index.js',
-        node_args             : '--env-file=.env',
+        // We must use __dirname to fix this issue that only exists in cluster mode,
+        // see https://github.com/Unitech/pm2/issues/5722
+        // This PR fixes it when merged: https://github.com/Unitech/pm2/pull/5723
+        node_args             : `--env-file=${__dirname}/.env`,
         time                  : true,
-        instances             : 'max',
+        instances             : 0,
         env_production: {
             NODE_ENV: 'production'
         }
