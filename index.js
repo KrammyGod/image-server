@@ -258,7 +258,7 @@ app.delete('/api/delete', authenticate, express.json(), (req, res) => {
 
 app.use(favicon(FAVICON_PATH));
 
-app.use('/', (req, res) => {
+app.all('/', (req, res) => {
     res.redirect('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
 });
 
