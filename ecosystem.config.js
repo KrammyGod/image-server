@@ -22,8 +22,7 @@ module.exports = {
             'repo'        : 'git@github.com:KrammyGod/image-server.git',
             'path'        : process.env.DEPLOY_PATH,
             'pre-setup'   : `mkdir -p ${process.env.DEPLOY_PATH}`,
-            'pre-deploy'  : 'npm ci --omit=dev',
-            'post-deploy' : 'pm2 start --env production'
+            'post-deploy' : 'npm i --omit=dev && pm2 start --env production'
         }
     }
 };
