@@ -44,7 +44,7 @@ async function query(q, values) {
         client.release();
     }
     return res;
-};
+}
 
 const app = express();
 app.set('trust proxy', true);
@@ -266,7 +266,7 @@ app.use((req, res) => {
     res.status(200).sendFile(ERROR_HTML);
 });
 
-app.use((err, req, res, next) => {
+app.use((err, req, res, _) => {
     console.error(err);
     res.status(200).sendFile(ERROR_HTML);
 });
