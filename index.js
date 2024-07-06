@@ -26,26 +26,6 @@ if (!fs.existsSync(FULL_PATH)) {
     fs.mkdirSync(FULL_PATH, { recursive: true });
 }
 
-/**
- * Query database safely
- * @param {string} q The query string
- * @param {any[]} values Parameters to the query
- * @returns {Promise<pg.QueryResultRow[]>} The resulting rows
- */
-async function query(q, values) {
-    const client = await pool.connect().catch(() => {
-        // Wrap so we can throw our own error.
-        throw new Error('Database connection failed.');
-    });
-    let res = [];
-    try {
-        res = await client.query(q, values).then(res => res.rows);
-    } finally {
-        client.release();
-    }
-    return res;
-}
-
 const app = express();
 app.set('trust proxy', true);
 const storage = multer.diskStorage({
@@ -62,9 +42,9 @@ const storage = multer.diskStorage({
         let tries = 0;
         while (tries < 10) {
             // Will hit conflict if filename already exists
-            if (await query('INSERT INTO images(fn) VALUES ($1)', [filename]).then(() => false, () => true)) {
+            if (await pool.query('INSERT INTO images(fn) VALUES ($1)', [filename]).then(() => false, () => true)) {
                 // Try to delete what we just inserted in case and ignore if there are any errors.
-                await query('DELETE FROM images WHERE fn = $1', [filename]).catch(() => { });
+                await pool.query('DELETE FROM images WHERE fn = $1', [filename]).catch(() => { });
                 filename = `${hasher.generateHash(HASH_LENGTH)}${ext}`;
             } else {
                 break;
@@ -114,11 +94,11 @@ app.use(logger);
 
 // Public API returning all sources for any file
 app.use('/source/:filename', (req, res, next) => {
-    query(
+    pool.query(
         'SELECT source FROM images WHERE fn = $1',
         [req.params.filename]
     ).then(ret => {
-        if (ret.length === 0) {
+        if (ret.rowCount === 0) {
             // Cant find image
             return next(); // This will redirect to 404 page
         } else if (!ret[0].source) {
@@ -137,11 +117,15 @@ app.use('/source/:filename', (req, res, next) => {
  * @param {express.NextFunction} next The callback to call if it succeeds
  */
 function authenticate(req, res, next) {
-    // Secret doesn't match, throw 404
-    if (req.headers.authorization !== SECRET) {
-        return res.status(200).sendFile(ERROR_HTML);
+    // Check if secret matches
+    if (req.headers.authorization.startsWith('Bearer ')) {
+        const encodedToken = req.headers.authorization.split(' ')[1];
+        const token = Buffer.from(encodedToken, 'base64').toString('utf-8');
+        if (token === SECRET) {
+            return next();
+        }
     }
-    next();
+    return res.status(200).sendFile(ERROR_HTML);
 }
 
 /**
@@ -161,7 +145,7 @@ app.post('/api/upload', authenticate, (req, res) => {
         }
         const sources = !Array.isArray(req.body?.sources) ? [req.body?.sources] : req.body.sources;
         for (const [i, file] of req.files.entries()) {
-            query(
+            pool.query(
                 'UPDATE images SET source = $1 WHERE fn = $2',
                 [sources[i], file.filename]
             ).catch(() => { });
@@ -187,7 +171,7 @@ app.post('/api/sources', authenticate, express.json(), async (req, res) => {
     }
     const sources = [];
     for (const filename of req.body.filenames) {
-        const res = await query(
+        const res = await pool.query(
             'SELECT source FROM images WHERE fn = $1',
             [filename]
         ).catch(() => { });
@@ -213,7 +197,7 @@ app.put('/api/update', authenticate, express.json(), async (req, res) => {
     // We allow sources to be undefined to clear source easily.
     const sources = [];
     for (const [i, filename] of req.body.filenames.entries()) {
-        const res = await query(
+        const res = await pool.query(
             'UPDATE images SET source = $1 WHERE fn = $2 RETURNING *',
             [req.body?.sources[i], filename]
         ).catch(() => { });
@@ -243,7 +227,7 @@ app.delete('/api/delete', authenticate, express.json(), (req, res) => {
         if (fs.existsSync(filepath)) {
             try {
                 fs.unlinkSync(filepath);
-                query('DELETE FROM images WHERE fn = $1', [filename]).catch(() => { });
+                pool.query('DELETE FROM images WHERE fn = $1', [filename]).catch(() => { });
                 successful.push(filename);
             } catch (e) {
                 console.error(e);
