@@ -15,7 +15,7 @@ const uploadedFilenames = [];
 
 (async () => {
     let headers = new Headers();
-    headers.append('Authorization', SECRET);
+    headers.append('Authorization', `Bearer ${Buffer.from(SECRET).toString('base64')}`);
     // First request: Upload images
     let res = await fetch('http://localhost:5000/api/upload', {
         method: 'POST',

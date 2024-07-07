@@ -101,12 +101,12 @@ app.use('/source/:filename', (req, res, next) => {
         if (ret.rowCount === 0) {
             // Cant find image
             return next(); // This will redirect to 404 page
-        } else if (!ret[0].source) {
+        } else if (!ret.rows[0].source) {
             // Can't find source
             return res.redirect(`/${PUBLIC_PATH}/${req.params.filename}`);
         }
         // Attempt to redirect to source
-        res.redirect(ret[0].source);
+        res.redirect(ret.rows[0].source);
     }).catch(() => next());
 });
 
@@ -118,7 +118,7 @@ app.use('/source/:filename', (req, res, next) => {
  */
 function authenticate(req, res, next) {
     // Check if secret matches
-    if (req.headers.authorization.startsWith('Bearer ')) {
+    if (req.headers.authorization?.startsWith('Bearer ')) {
         const encodedToken = req.headers.authorization.split(' ')[1];
         const token = Buffer.from(encodedToken, 'base64').toString('utf-8');
         if (token === SECRET) {
@@ -175,7 +175,7 @@ app.post('/api/sources', authenticate, express.json(), async (req, res) => {
             'SELECT source FROM images WHERE fn = $1',
             [filename]
         ).catch(() => { });
-        sources.push(res?.at(0)?.source ?? null);
+        sources.push(res?.rows.at(0)?.source ?? null);
     }
     res.status(200).send({ sources });
 });
@@ -201,7 +201,7 @@ app.put('/api/update', authenticate, express.json(), async (req, res) => {
             'UPDATE images SET source = $1 WHERE fn = $2 RETURNING *',
             [req.body?.sources[i], filename]
         ).catch(() => { });
-        sources.push(res?.at(0)?.source ?? 'null');
+        sources.push(res?.rows.at(0)?.source ?? 'null');
     }
     res.status(200).send({
         message: `OK, updated sources of ${req.body.filenames.join(', ')} to ${sources.join(', ')}`
