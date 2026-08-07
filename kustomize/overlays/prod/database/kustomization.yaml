@@ -1,0 +1,8 @@
+resources:
+  - ../../../base/database/
+  - ./sealed-secret.yaml
+
+labels:
+  - pairs:
+      app: postgres
+    includeSelectors: true

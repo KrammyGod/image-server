@@ -1,0 +1,19 @@
+name: Deploy
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: ["main"]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    permissions:
+      contents: read
+      packages: write
+    uses: KrammyGod/actions-system/.github/workflows/deploy.yml@v1
+    with:
+      namespace: image-server
+      images: '[{"name": "image-server"}]'

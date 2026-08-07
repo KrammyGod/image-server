@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: image-server
+  labels:
+    app: image-server
+spec:
+  replicas: 2
+  template:
+    spec:
+      containers:
+        - name: image-server
+          envFrom:
+            - configMapRef:
+                name: image-server-config
+          env:
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: username
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: password

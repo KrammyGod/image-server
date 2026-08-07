@@ -1,0 +1,68 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: nginx-static-ingress
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  ingressClassName: traefik
+  rules:
+    - http:
+        paths:
+          - path: /data
+            pathType: Exact
+            backend:
+              service:
+                name: nginx-static-service
+                port:
+                  number: 8080
+          - path: /data/
+            pathType: Exact
+            backend:
+              service:
+                name: nginx-static-service
+                port:
+                  number: 8080
+          - path: /data/images/
+            pathType: Prefix
+            backend:
+              service:
+                name: nginx-static-service
+                port:
+                  number: 8080
+          - path: /data/source/
+            pathType: Prefix
+            backend:
+              service:
+                name: nginx-static-service
+                port:
+                  number: 8080
+          - path: /.well-known/discord
+            pathType: Exact
+            backend:
+              service:
+                name: nginx-static-service
+                port:
+                  number: 8080
+---
+# The allow-list is bound to the entrypoint itself, so no middleware is named
+# here and apps cannot forget it.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: nginx-static-ingress-internal
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: internal
+spec:
+  ingressClassName: traefik
+  rules:
+    - http:
+        paths:
+          - path: /data/images/
+            pathType: Prefix
+            backend:
+              service:
+                name: nginx-static-service
+                port:
+                  number: 8090

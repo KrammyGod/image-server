@@ -1,0 +1,5 @@
+namespace: image-server
+resources:
+  - ./server/
+  - ./nginx-static/
+  - ./database/

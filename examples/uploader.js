@@ -1,6 +1,5 @@
 const fs = require('fs');
 
-const SECRET = process.env.SECRET;
 const uploadForm = new FormData();
 // Read all images from images folder and reupload.
 // Ensure this is not used in production, will reupload all files!
@@ -15,7 +14,6 @@ const uploadedFilenames = [];
 
 (async () => {
     let headers = new Headers();
-    headers.append('Authorization', `Bearer ${Buffer.from(SECRET).toString('base64')}`);
     // First request: Upload images
     let res = await fetch('http://localhost:5000/api/upload', {
         method: 'POST',

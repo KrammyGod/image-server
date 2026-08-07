@@ -1,17 +1,15 @@
 const fs = require('fs');
 const express = require('express');
-const favicon = require('serve-favicon');
 const hasher = require('./hasher');
 const path = require('path');
 const pg = require('pg');
 const multer = require('multer');
 
 const PORT = process.env.PORT || 5000;
-const SECRET = process.env.SECRET;
+const PUBLIC_PREFIX = '/data';
 const PUBLIC_PATH = 'images'; // Constant from nginx config
 const FULL_PATH = path.isAbsolute(process.env.DIR) ? process.env.DIR : path.join(__dirname, process.env.DIR)
 const ERROR_HTML = path.join(__dirname, '404.html');
-const FAVICON_PATH = path.join(__dirname, 'favicon.ico');
 // AWS CloudFront URL
 const CDN_URL = 'https://d1irvsiobt1r8d.cloudfront.net';
 // Hash length
@@ -81,19 +79,21 @@ const logger = (req, res, next) => {
             // Else represent in seconds
             time = `${end[0]}.${Math.round(milliseconds)}s`;
         }
-        // Cloudfront secret header passed, so ignore X-Forwarded-For from nginx, and use X-Real-IP
-        const realIp = req.headers[process.env.HEADER] === process.env.HEADER_VALUE ? req.headers['x-real-ip'] : req.ip;
-        console.log(`${req.method} ${req.originalUrl} from ${realIp} returned in ` +
+        // trust proxy is on, so req.ip is the leftmost X-Forwarded-For entry —
+        // the real client, not the ingress that relayed it.
+        console.log(`${req.method} ${req.originalUrl} from ${req.ip} returned in ` +
             `${time} with status ${res.statusCode}`);
     };
     next();
 };
 
+app.get('/healthz', (req, res) => res.status(200).send('ok'));
+
 // Log all incoming requests.
 app.use(logger);
 
-// Public API returning all sources for any file
-app.use('/source/:filename', (req, res, next) => {
+// Public API returning all sources for any file.
+app.use(`${PUBLIC_PREFIX}/source/:filename`, (req, res, next) => {
     pool.query(
         'SELECT source FROM images WHERE fn = $1',
         [req.params.filename]
@@ -102,8 +102,8 @@ app.use('/source/:filename', (req, res, next) => {
             // Cant find image
             return next(); // This will redirect to 404 page
         } else if (!ret.rows[0].source) {
-            // Can't find source
-            return res.redirect(`/${PUBLIC_PATH}/${req.params.filename}`);
+            // Can't find source, redirect to CDN
+            return res.redirect(`${CDN_URL}/${PUBLIC_PATH}/${req.params.filename}`);
         }
         // Attempt to redirect to source
         res.redirect(ret.rows[0].source);
@@ -111,32 +111,13 @@ app.use('/source/:filename', (req, res, next) => {
 });
 
 /**
- * Authenticates protected API requests.
- * @param {express.Request} req The request object
- * @param {express.Response} res The response object
- * @param {express.NextFunction} next The callback to call if it succeeds
- */
-function authenticate(req, res, next) {
-    // Check if secret matches
-    if (req.headers.authorization?.startsWith('Bearer ')) {
-        const encodedToken = req.headers.authorization.split(' ')[1];
-        const token = Buffer.from(encodedToken, 'base64').toString('utf-8');
-        if (token === SECRET) {
-            return next();
-        }
-    }
-    return res.status(200).sendFile(ERROR_HTML);
-}
-
-/**
- * Not accessible via cloudfront; it doesn't pass body
  * Method: POST
  * Route: /api/upload
  * Request type: multipart/form-data
  * Request body: { filename: blob, sources: string | string[] }
  * Response body: { urls: string[], ids: string[] }
  */
-app.post('/api/upload', authenticate, (req, res) => {
+app.post('/api/upload', (req, res) => {
     // Form data must be put into images field.
     upload.array('images')(req, res, e => {
         if (e) {
@@ -165,7 +146,7 @@ app.post('/api/upload', authenticate, (req, res) => {
  * Request body: { filenames: string[] }
  * Response body: { sources: string[] }
  */
-app.post('/api/sources', authenticate, express.json(), async (req, res) => {
+app.post('/api/sources', express.json(), async (req, res) => {
     if (!req.body?.filenames || !Array.isArray(req.body.filenames)) {
         return res.status(400).send({ message: 'No filenames provided.' });
     }
@@ -188,7 +169,7 @@ app.post('/api/sources', authenticate, express.json(), async (req, res) => {
  * Request body: { filenames: string[], sources?: string[] }
  * Response body: { message: string }
  */
-app.put('/api/update', authenticate, express.json(), async (req, res) => {
+app.put('/api/update', express.json(), async (req, res) => {
     if (!req.body?.filenames || !Array.isArray(req.body.filenames)) {
         return res.status(400).send({ message: 'No filenames provided.' });
     } else if (req.body?.source !== undefined && !Array.isArray(req.body.sources)) {
@@ -216,7 +197,7 @@ app.put('/api/update', authenticate, express.json(), async (req, res) => {
  * Request body: { filenames: string[] }
  * Response body: { message: string }
  */
-app.delete('/api/delete', authenticate, express.json(), (req, res) => {
+app.delete('/api/delete', express.json(), (req, res) => {
     if (!req.body?.filenames || !Array.isArray(req.body.filenames)) {
         return res.status(400).send({ message: 'No filenames provided.' });
     }
@@ -238,12 +219,6 @@ app.delete('/api/delete', authenticate, express.json(), (req, res) => {
         return res.status(400).send({ message: 'No files matching were found. None were deleted.' });
     }
     res.status(200).send({ message: `OK, deleted ${successful.join(', ')}` });
-});
-
-app.use(favicon(FAVICON_PATH));
-
-app.all('/', (req, res) => {
-    res.redirect('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
 });
 
 app.use((req, res) => {

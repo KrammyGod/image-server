@@ -1,0 +1,8 @@
+resources:
+  - ./deployment.yaml
+  - ./service.yaml
+
+labels:
+  - pairs:
+      app: image-server
+    includeSelectors: true
