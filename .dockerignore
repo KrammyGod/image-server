@@ -1,0 +1,13 @@
+node_modules
+.git
+.env*
+images/
+examples/
+dist/
+.github/
+sql/
+kustomize/
+docs/
+CLAUDE.md
+LICENSE
+README.md

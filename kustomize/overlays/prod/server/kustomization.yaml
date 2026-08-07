@@ -1,0 +1,20 @@
+resources:
+  - ../../../base/server/
+  - ./ingress.yaml
+
+configMapGenerator:
+  - name: image-server-config
+    literals:
+      - PGHOST=postgres-service
+      - PGDATABASE=image_server
+      - PORT=5000
+      - DIR=/data/images
+      - NODE_ENV=production
+
+patches:
+  - path: ./deployment.patch.yaml
+
+labels:
+  - pairs:
+      app: image-server
+    includeSelectors: true

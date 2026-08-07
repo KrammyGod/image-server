@@ -12,3 +12,6 @@ node_modules/
 
 # Folder that contains the images
 images/
+
+# Local-only design notes.
+docs/

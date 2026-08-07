@@ -1,0 +1,14 @@
+resources:
+  - ./deployment.yaml
+  - ./service.yaml
+
+configMapGenerator:
+  - name: nginx-static-config
+    files:
+      - nginx.conf
+      - discord.txt
+
+labels:
+  - pairs:
+      app: nginx-static
+    includeSelectors: true

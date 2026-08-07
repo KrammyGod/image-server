@@ -1,0 +1,9 @@
+resources:
+  - ../../../base/nginx-static/
+  - ./ingress.yaml
+  - ./sealed-secret.yaml
+
+labels:
+  - pairs:
+      app: nginx-static
+    includeSelectors: true
