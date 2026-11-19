@@ -56,7 +56,9 @@ authorization model:**
 **The `/api/*` routes have no application-level authentication.** That is not an
 oversight — they are published only on the LAN-restricted entrypoint, and the
 allow-list stands in for the Bearer secret that used to be there. Anything that
-publishes them publicly must add authentication back first.
+publishes them publicly must add authentication back first. IPv6 has no NAT to
+hide a LAN-only port behind, so an over-broad IPv6 entry in that allow-list
+publishes these routes to the internet just as surely.
 
 **Paths are `Exact`, never `Prefix`, under `/api`.** The hostname is shared with
 other routers, so a prefix rule would shadow paths this repo does not own.
@@ -115,6 +117,28 @@ The password exists in exactly one place: both the postgres container and the
 application read `postgres-secret` directly. The application maps it onto
 `PGUSER`/`PGPASSWORD` via `secretKeyRef` rather than composing a connection URL,
 which is what keeps it to one copy. Do not introduce a `DATABASE_URL`.
+
+### IP families
+
+Every Service is `ipFamilyPolicy: PreferDualStack`: a ClusterIP and endpoints in
+both families on a dual-stack cluster, a quiet single-stack Service on any other.
+Not `RequireDualStack`, which refuses to apply on a single-stack cluster.
+`ipFamilies` is left unset so the cluster's primary family stays primary; the
+primary family of an existing Service is immutable, so pinning the opposite
+order would fail to apply.
+
+Every listener already takes both families, and must keep doing so:
+
+- **nginx** has an explicit `listen [::]:port` beside each IPv4 `listen`. nginx
+  defaults `[::]` to `ipv6only=on`, so both lines are needed.
+- **the application** calls `listen` with no host, which Node binds to `::`
+  dual-stack. Do not add `'0.0.0.0'`.
+- **postgres** — the image sets `listen_addresses = '*'` and its `pg_hba.conf`
+  rule matches `all` addresses.
+
+nginx's literal upstream resolves to both ClusterIPs at startup and round-robins
+between them. A Service upgraded to dual-stack under a running nginx is reached
+over its original family only, until nginx next restarts — harmless.
 
 ## Traps
 
