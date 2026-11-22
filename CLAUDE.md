@@ -50,7 +50,8 @@ authorization model:**
 |---|---|---|
 | `/data`, `/data/` | public | origin header, in nginx |
 | `/data/images/`, `/data/source/` | public | origin header, in nginx |
-| `/.well-known/discord`, `/healthz` | public | none, deliberately |
+| `/data/.well-known/discord` | public | none, deliberately |
+| `/healthz` | not routed; kubelet only | none |
 | `/api/upload,sources,update,delete` | LAN-only | the entrypoint's source-address allow-list |
 
 **The `/api/*` routes have no application-level authentication.** That is not an
@@ -65,15 +66,19 @@ other routers, so a prefix rule would shadow paths this repo does not own.
 `/data/images/` and `/data/source/` are `Prefix` because they are whole
 namespaces this repo owns outright.
 
-**`/.well-known/discord` is the one path that cannot move under `/data`.**
-Domain verification fetches it on the bare domain, never through the CDN, so no
-origin path is applied to it. It is `Exact`, so it shadows nothing.
+**`/data/.well-known/discord` is the CDN's `/.well-known/discord`.** Domain
+verification fetches it through the CDN, and CloudFront's `/data` origin path
+maps it here. It is `Exact`, so it shadows nothing.
 
 ### The origin gate
 
 nginx compares the `from-cloudfront` header against a value injected from a
-Secret and returns `444` on a mismatch. This is what stops traffic reaching the
+Secret and returns `403` on a mismatch. This is what stops traffic reaching the
 origin directly and bypassing the CDN cache.
+
+Not `444`: nginx sits behind Traefik, so closing the connection only drops
+Traefik's upstream, and the client sees a `502` indistinguishable from nginx
+being down.
 
 The header **name** is in `nginx.conf`; the **value** is not, because this repo
 is public. It arrives through the nginx image's own
@@ -87,8 +92,9 @@ empty string, and the config becomes nonsense.
 
 The gate is applied **per-location, not at server level**. A server-level `if`
 runs in the rewrite phase for every request and would also swallow `/healthz`
-(the kubelet sends no CDN header, so every pod would fail its probe) and
-`/.well-known/discord` (fetched directly, never through the CDN).
+(the kubelet sends no CDN header, so every pod would fail its probe). The
+Discord location stays ungated: it uses `alias` (see Traps), and the token is
+public by design.
 
 ### Storage
 

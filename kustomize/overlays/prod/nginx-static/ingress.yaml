@@ -38,7 +38,8 @@ spec:
                 name: nginx-static-service
                 port:
                   number: 8080
-          - path: /.well-known/discord
+          # The CDN's /.well-known/discord, after CloudFront's /data origin path.
+          - path: /data/.well-known/discord
             pathType: Exact
             backend:
               service:
